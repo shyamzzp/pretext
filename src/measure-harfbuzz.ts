@@ -1,5 +1,12 @@
 // Server-side text measurement using HarfBuzz (WASM).
-// Drop-in replacement for canvas measureText in headless environments.
+// Used for headless testing (bun test) where canvas measureText isn't available.
+//
+// HarfBuzz is the same shaping engine browsers use internally, so measurements
+// are representative. The key difference: we load a specific font file, so results
+// are deterministic across platforms (vs browser canvas which resolves system fonts).
+//
+// Not used in the browser — the browser version uses canvas measureText directly,
+// which is faster and uses the same fonts the DOM will render with.
 
 import type { HarfBuzzModule, HarfBuzzFont, HarfBuzzFace, HarfBuzzBlob } from './harfbuzz-types.ts'
 

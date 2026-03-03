@@ -2,9 +2,17 @@ import { test, expect, beforeAll, describe } from 'bun:test'
 import { init, loadFont, measureText } from './measure-harfbuzz.ts'
 import { TEXTS, SIZES, WIDTHS } from './test-data.ts'
 
-// We can't use canvas measureText in bun, so we reimplement the
-// prepare+layout logic using HarfBuzz for measurement. This tests
-// the same algorithm with the same data as the browser accuracy page.
+// Headless test suite for the line breaking algorithm.
+//
+// Can't use canvas measureText in bun (no OffscreenCanvas), so we use HarfBuzz
+// for measurement instead. Same algorithm, same test data as the browser
+// accuracy page — just a different measurement backend.
+//
+// Tests two things:
+//   1. Consistency: edge cases, monotonicity, determinism
+//   2. Accuracy: word-by-word sum vs full-line measurement using the same engine.
+//      This isolates algorithm accuracy from measurement backend differences.
+//      100% match confirms the word-by-word approach is exact.
 
 const FONT_PATH = '/Library/Fonts/Arial Unicode.ttf'
 const FONT_NAME = 'Arial Unicode'

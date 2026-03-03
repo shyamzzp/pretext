@@ -1,4 +1,7 @@
-// Shared test texts and parameters for both browser and headless tests.
+// Shared test data for both the browser accuracy page (pages/accuracy.ts) and
+// headless tests (layout.test.ts). Covers Latin, Arabic, Hebrew, CJK, Korean,
+// Thai, emoji, mixed-direction, and edge cases (empty, whitespace, newlines,
+// long words). Parameters sweep across realistic font sizes and container widths.
 
 export const TEXTS = [
   // Latin

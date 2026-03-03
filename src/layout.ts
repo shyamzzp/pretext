@@ -1,12 +1,38 @@
-// Text measurement: Intl.Segmenter + canvas measureText + bidi.
-// Two-phase: prepare() once per text, layout() is pure arithmetic on resize.
+// DOM-free text measurement for browser environments.
+//
+// Problem: DOM-based text measurement (getBoundingClientRect, offsetHeight)
+// forces synchronous layout reflow. When components independently measure text,
+// each measurement triggers a reflow of the entire document. This creates
+// read/write interleaving that can cost 30ms+ per frame for 500 text blocks.
+//
+// Solution: two-phase measurement using canvas measureText (no DOM reads).
+//   prepare(text, font) — segments text via Intl.Segmenter, measures each word
+//     via canvas, caches widths. Call once when text first appears.
+//   layout(prepared, maxWidth) — walks cached word widths with pure arithmetic
+//     to count lines and compute height. Call on every resize. ~0.0002ms per text.
+//
+// i18n: Intl.Segmenter handles CJK (per-character breaking), Thai, Arabic, etc.
+//   Bidi: Unicode Bidirectional Algorithm for mixed LTR/RTL text.
+//   Punctuation merging: "better." measured as one unit (matches CSS behavior).
+//   Trailing whitespace: hangs past line edge without triggering breaks (CSS behavior).
+//   overflow-wrap: pre-measured grapheme widths enable character-level word breaking.
+//
+// Limitations:
+//   - Emoji: canvas measures 4px wider than DOM at font sizes <24px on macOS.
+//     This is a browser pipeline difference (Apple Color Emoji), not algorithmic.
+//   - system-ui font: canvas resolves to different optical variants than DOM on macOS.
+//     Use named fonts (Helvetica, Inter, etc.) for guaranteed accuracy.
+//
+// Based on Sebastian Markbage's text-layout research (github.com/reactjs/text-layout).
 
 const canvas = typeof OffscreenCanvas !== 'undefined'
   ? new OffscreenCanvas(1, 1)
   : document.createElement('canvas')
 const ctx = canvas.getContext('2d')!
 
-// --- Word width cache: font → Map<segment, width> ---
+// Word width cache: font → Map<segment, width>.
+// Persists across prepare() calls. Common words ("the", "a", etc.) are measured
+// once and shared across all text blocks. Survives resize since font doesn't change.
 
 const wordCaches = new Map<string, Map<string, number>>()
 
@@ -33,7 +59,10 @@ function parseFontSize(font: string): number {
   return m ? parseFloat(m[1]!) : 16
 }
 
-// --- CJK detection ---
+// CJK characters don't use spaces between words. Intl.Segmenter with
+// granularity 'word' groups them into multi-character words, but CSS allows
+// line breaks between any CJK characters. We detect CJK segments and split
+// them into individual graphemes so each character is a valid break point.
 
 function isCJK(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
@@ -51,7 +80,11 @@ function isCJK(s: string): boolean {
   return false
 }
 
-// --- Bidi character classification (from Unicode/pdf.js) ---
+// Unicode Bidirectional Algorithm (UAX #9), forked from pdf.js via Sebastian's
+// text-layout. Classifies characters into bidi types, computes embedding levels,
+// and reorders segments within each line for correct visual display of mixed
+// LTR/RTL text. Only needed for paragraphs containing RTL characters; pure LTR
+// text fast-paths with null levels (zero overhead).
 
 type BidiType = 'L' | 'R' | 'AL' | 'AN' | 'EN' | 'ES' | 'ET' | 'CS' |
                 'ON' | 'BN' | 'B' | 'S' | 'WS' | 'NSM'
@@ -174,6 +207,9 @@ function computeBidiLevels(str: string): Int8Array | null {
   return levels
 }
 
+// L2 rule: reorder segments within a completed line for visual display.
+// Reverses contiguous sequences of RTL segments at each embedding level.
+// Returns reordered index array, or null if the line is pure LTR.
 function reorderLine(segLevels: Int8Array, start: number, end: number): number[] | null {
   let low = 127, high = 0
   for (let i = start; i < end; i++) {
@@ -224,6 +260,19 @@ export type LayoutResult = {
 
 // --- Public API ---
 
+// Prepare text for layout. Segments the text, measures each segment via canvas,
+// and stores the widths for fast relayout at any width. Call once per text block
+// (e.g. when a comment first appears). The result is width-independent — the
+// same PreparedText can be laid out at any maxWidth via layout().
+//
+// Steps:
+//   1. Normalize newlines to spaces (CSS white-space: normal behavior)
+//   2. Segment via Intl.Segmenter (handles CJK, Thai, etc.)
+//   3. Merge punctuation into preceding word ("better." as one unit)
+//   4. Split CJK words into individual graphemes (per-character line breaks)
+//   5. Measure each segment via canvas measureText, cache by (segment, font)
+//   6. Pre-measure graphemes of long words (for overflow-wrap: break-word)
+//   7. Compute bidi embedding levels for mixed-direction text
 export function prepare(text: string, font: string, lineHeight?: number): PreparedText {
   ctx.font = font
   const cache = getWordCache(font)
@@ -233,6 +282,8 @@ export function prepare(text: string, font: string, lineHeight?: number): Prepar
   }
 
   const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' })
+  // CSS white-space: normal collapses newlines to spaces. For pre-wrap behavior,
+  // callers should split on \n and prepare each paragraph separately.
   const normalized = text.replace(/\n/g, ' ')
 
   if (normalized.length === 0 || normalized.trim().length === 0) {
@@ -247,7 +298,11 @@ export function prepare(text: string, font: string, lineHeight?: number): Prepar
   const segStarts: number[] = []
   const breakableWidths: (number[] | null)[] = []
 
-  // Merge punctuation into preceding words: "better." as one unit
+  // Merge punctuation into preceding word segments. Without this,
+  // measureText("better") + measureText(".") can differ from measureText("better.")
+  // by enough to cause off-by-one line breaks at borderline widths (up to 2.6px
+  // accumulation error at 28px font). Merging also matches CSS behavior where
+  // punctuation is visually attached to its word and not broken separately.
   const rawSegs = [...segments]
   const merged: { text: string, isWordLike: boolean, isSpace: boolean, start: number }[] = []
 
@@ -307,6 +362,16 @@ export function prepare(text: string, font: string, lineHeight?: number): Prepar
   return { paraData: [{ widths, isWordLike, isSpace, segLevels, breakableWidths }], lineHeight }
 }
 
+// Layout prepared text at a given max width. Pure arithmetic on cached widths —
+// no canvas calls, no DOM reads, no string operations, no allocations.
+// ~0.0002ms per text block. Call on every resize.
+//
+// Line breaking rules (matching CSS white-space: normal + overflow-wrap: break-word):
+//   - Break before word-like segments that would overflow the line
+//   - Trailing whitespace hangs past the line edge (doesn't trigger breaks)
+//   - Non-whitespace punctuation overflows trigger break before the last word
+//   - Segments wider than maxWidth are broken at grapheme boundaries
+//   - Bidi reordering applied per completed line
 export function layout(prepared: PreparedText, maxWidth: number, lineHeight?: number): LayoutResult {
   const { paraData } = prepared
   if (lineHeight === undefined) lineHeight = prepared.lineHeight

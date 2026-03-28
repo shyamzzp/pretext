@@ -88,7 +88,7 @@ while (true) {
 }
 ```
 
-This usage allows rendering to canvas, SVG, WebGL and (eventually) server-side. See the [demos index](/demos) for richer examples.
+This usage allows rendering to canvas, SVG, WebGL and (eventually) server-side.
 
 ### API Glossary
 

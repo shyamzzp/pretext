@@ -488,61 +488,63 @@ export default function MasonryBoard() {
         '--card-action-icon-size': `${16 * zoom}px`,
       }}
     >
-      <div className="page-toolbar">
-        <div className="page-toolbar-group">
-          <button
-            type="button"
-            className={`toolbar-pill${filter === 'all' ? ' is-active' : ''}`}
-            data-testid="filter-all"
-            onClick={() => setFilter('all')}
-          >
-            All <span>{thoughts.length - hiddenCount}</span>
-          </button>
-          <button
-            type="button"
-            className={`toolbar-pill${filter === 'favorites' ? ' is-active' : ''}`}
-            data-testid="filter-favorites"
-            onClick={() => setFilter('favorites')}
-          >
-            Favorites <span>{favoriteCount}</span>
-          </button>
-        </div>
-        <div className="page-toolbar-group">
-          <button
-            type="button"
-            className="toolbar-pill"
-            data-testid="zoom-out"
-            onClick={() => handleZoom(-1)}
-            disabled={zoom <= MIN_ZOOM}
-          >
-            Zoom out
-          </button>
-          <button
-            type="button"
-            className="toolbar-pill is-active"
-            data-testid="zoom-level"
-            onClick={handleResetZoom}
-          >
-            Zoom <span>{zoomPercent}%</span>
-          </button>
-          <button
-            type="button"
-            className="toolbar-pill"
-            data-testid="zoom-in"
-            onClick={() => handleZoom(1)}
-            disabled={zoom >= MAX_ZOOM}
-          >
-            Zoom in
-          </button>
-          <button
-            type="button"
-            className="toolbar-pill"
-            data-testid="reset-hidden"
-            onClick={handleResetHidden}
-            disabled={hiddenCount === 0}
-          >
-            Reset hidden <span>{hiddenCount}</span>
-          </button>
+      <div className="page-toolbar-shell">
+        <div className="page-toolbar">
+          <div className="page-toolbar-group">
+            <button
+              type="button"
+              className={`toolbar-pill${filter === 'all' ? ' is-active' : ''}`}
+              data-testid="filter-all"
+              onClick={() => setFilter('all')}
+            >
+              All <span>{thoughts.length - hiddenCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`toolbar-pill${filter === 'favorites' ? ' is-active' : ''}`}
+              data-testid="filter-favorites"
+              onClick={() => setFilter('favorites')}
+            >
+              Favorites <span>{favoriteCount}</span>
+            </button>
+          </div>
+          <div className="page-toolbar-group">
+            <button
+              type="button"
+              className="toolbar-pill"
+              data-testid="zoom-out"
+              onClick={() => handleZoom(-1)}
+              disabled={zoom <= MIN_ZOOM}
+            >
+              Zoom out
+            </button>
+            <button
+              type="button"
+              className="toolbar-pill is-active"
+              data-testid="zoom-level"
+              onClick={handleResetZoom}
+            >
+              Zoom <span>{zoomPercent}%</span>
+            </button>
+            <button
+              type="button"
+              className="toolbar-pill"
+              data-testid="zoom-in"
+              onClick={() => handleZoom(1)}
+              disabled={zoom >= MAX_ZOOM}
+            >
+              Zoom in
+            </button>
+            <button
+              type="button"
+              className="toolbar-pill"
+              data-testid="reset-hidden"
+              onClick={handleResetHidden}
+              disabled={hiddenCount === 0}
+            >
+              Reset hidden <span>{hiddenCount}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -587,6 +589,7 @@ export default function MasonryBoard() {
               height: `${card.height}px`,
             }}
           >
+            <p className="card-text">{card.body}</p>
             <div className="card-actions">
               <IconButton
                 label={card.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -618,7 +621,6 @@ export default function MasonryBoard() {
                 <HideIcon />
               </IconButton>
             </div>
-            <p className="card-text">{card.body}</p>
           </article>
         ))}
       </div>

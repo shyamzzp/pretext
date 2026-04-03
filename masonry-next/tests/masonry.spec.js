@@ -131,6 +131,37 @@ test.describe('masonry page', () => {
     await expect(page.getByTestId('masonry-card').first()).toContainText(FIRST_THOUGHT)
   })
 
+  test('persists zoom, favorites, and hidden state across reloads', async ({ page }) => {
+    await page.goto('/')
+
+    const root = page.getByTestId('masonry-root')
+    const firstCard = page.getByTestId('masonry-card').first()
+    const secondCard = page.getByTestId('masonry-card').nth(1)
+
+    await expect(firstCard).toContainText(FIRST_THOUGHT)
+    await firstCard.getByRole('button', { name: 'Add to favorites' }).click()
+    await secondCard.getByRole('button', { name: 'Hide thought' }).click()
+    await page.keyboard.press(`${ZOOM_MODIFIER}+=`)
+
+    await expect(root).toHaveAttribute('data-card-count', '1903')
+    await expect(root).toHaveAttribute('data-zoom-level', '110')
+    await expect(firstCard).toHaveAttribute('data-favorite', 'true')
+
+    await page.reload()
+
+    const reloadedRoot = page.getByTestId('masonry-root')
+    const reloadedFirstCard = page.getByTestId('masonry-card').first()
+
+    await expect(reloadedRoot).toHaveAttribute('data-card-count', '1903')
+    await expect(reloadedRoot).toHaveAttribute('data-zoom-level', '110')
+    await expect(page.getByTestId('zoom-level')).toContainText('110%')
+    await expect(reloadedFirstCard).toContainText(FIRST_THOUGHT)
+    await expect(reloadedFirstCard).toHaveAttribute('data-favorite', 'true')
+    await expect(page.locator('body')).not.toContainText(
+      "The 'richest people' list in actuality is the 'legally richest people', which is only close to the actual richest people list. There are tons of illegal super rich people.",
+    )
+  })
+
   test('copy and permalink actions work on a card', async ({ page }) => {
     await page.goto('/')
 
